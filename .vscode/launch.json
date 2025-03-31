@@ -1,0 +1,25 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "preLaunchTask": "rust: cargo build",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "name": "probe-rs Launch",
+            "cwd": "${workspaceFolder}",
+            "chip": "nRF52840_xxAA",
+            "wireProtocol": "Swd",
+            "flashingConfig": {
+                "flashingEnabled": true
+            },
+            "coreConfigs": [
+                {
+                    "programBinary": "./target/thumbv7em-none-eabihf/debug/${workspaceFolderBasename}"
+                }
+            ]
+        }
+    ]
+}

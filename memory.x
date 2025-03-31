@@ -1,0 +1,6 @@
+/* Linker script for the nRF52840 */
+MEMORY
+{
+  FLASH : ORIGIN = 0x00000000, LENGTH = 1M
+  RAM   : ORIGIN = 0x20000000, LENGTH = 256K
+}
