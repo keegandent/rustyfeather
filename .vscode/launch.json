@@ -17,7 +17,15 @@
             },
             "coreConfigs": [
                 {
-                    "programBinary": "./target/thumbv7em-none-eabihf/debug/${workspaceFolderBasename}"
+                    "programBinary": "./target/thumbv7em-none-eabihf/debug/${workspaceFolderBasename}",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            "dataFormat": "String",
+                            "showTimestamps": true
+                        }
+                    ]
                 }
             ]
         }
