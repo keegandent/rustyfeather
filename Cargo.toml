@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+adafruit-nrf52840-express = "0.2.0"
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
-cortex-m-rt = "0.7.5"
-embedded-hal = "1.0.0"
+cortex-m-rt = "=0.6.15"
 nrf52840-hal = "0.18.0"
 nrf52840-pac = "0.12.2"
 panic-halt = "1.0.0"
