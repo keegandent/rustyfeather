@@ -1158,6 +1158,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nrf52840-pac"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30713f36f1be02e5bc9abefa30eae4a1f943d810f199d4923d3ad062d1be1b3d"
+dependencies = [
+ "cortex-m",
+ "vcell",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1515,6 +1525,7 @@ dependencies = [
  "cargo-binutils",
  "cortex-m",
  "cortex-m-rt",
+ "nrf52840-pac",
  "panic-halt",
  "probe-rs",
  "rtt-target",
