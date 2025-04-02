@@ -5,7 +5,9 @@ extern crate cortex_m;
 
 use cortex_m::asm::nop;
 use cortex_m_rt::entry;
-use nrf52840_pac::Peripherals;
+use embedded_hal::digital::{StatefulOutputPin, OutputPin};
+use hal::pac::Peripherals;
+use nrf52840_hal::{self as hal, gpio::Level};
 use panic_halt as _;
 use rtt_target::{debug_rtt_init_print as rtt_init_print, debug_rprintln as rprintln};
 
@@ -13,11 +15,12 @@ use rtt_target::{debug_rtt_init_print as rtt_init_print, debug_rprintln as rprin
 fn main() -> ! {
     rtt_init_print!();
     let p = Peripherals::take().unwrap();
-    p.P1.pin_cnf[10].write(|w| w.dir().output());
-    let mut led_on: bool = false;
+    let port1 = hal::gpio::p1::Parts::new(p.P1);
+    let mut led = port1.p1_10.into_push_pull_output(Level::Low);
     loop {
-        p.P1.out.write(|w| w.pin10().bit(led_on));
+        // can technically be accomplished with //.toggle().unwrap() but nice to see other methods
+        let new_state = led.is_set_low().unwrap();
+        led.set_state(new_state.into()).unwrap();
         for _ in 0..(1e6 as i32) { nop(); }
-        led_on = !led_on;
     }
 }
