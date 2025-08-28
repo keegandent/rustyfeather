@@ -5,11 +5,11 @@ extern crate cortex_m;
 
 use cortex_m::asm::nop;
 use cortex_m_rt::entry;
-use embedded_hal::digital::{StatefulOutputPin, OutputPin};
+use embedded_hal::digital::{OutputPin, StatefulOutputPin};
 use hal::pac::Peripherals;
 use nrf52840_hal::{self as hal, gpio::Level};
 use panic_halt as _;
-use rtt_target::{debug_rtt_init_print as rtt_init_print, debug_rprintln as rprintln};
+use rtt_target::{debug_rprintln as rprintln, debug_rtt_init_print as rtt_init_print};
 
 #[entry]
 fn main() -> ! {
@@ -21,6 +21,8 @@ fn main() -> ! {
         // can technically be accomplished with //.toggle().unwrap() but nice to see other methods
         let new_state = led.is_set_low().unwrap();
         led.set_state(new_state.into()).unwrap();
-        for _ in 0..(1e6 as i32) { nop(); }
+        for _ in 0..(1e6 as i32) {
+            nop();
+        }
     }
 }
