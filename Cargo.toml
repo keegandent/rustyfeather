@@ -11,7 +11,3 @@ nrf52840-hal = "0.18.0"
 nrf52840-pac = "0.12.2"
 panic-halt = "1.0.0"
 rtt-target = "0.6.1"
-
-[dev-dependencies]
-cargo-binutils = "0.3.6"
-probe-rs = "0.27.0"
