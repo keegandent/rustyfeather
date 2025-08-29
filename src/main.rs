@@ -1,27 +1,21 @@
 #![no_std]
 #![no_main]
 
-use cortex_m as _;
-use cortex_m::asm::nop;
-use cortex_m_rt::entry;
 use defmt::info;
 use defmt_rtt as _;
-use embedded_hal::digital::{OutputPin, StatefulOutputPin};
-use hal::pac::Peripherals;
-use nrf52840_hal::{self as hal, gpio::Level};
-use panic_halt as _;
+use embassy_executor::{main, Spawner};
+use embassy_nrf::gpio::{Input, Pull};
+use panic_probe as _;
 
-#[entry]
-fn main() -> ! {
-    let p = Peripherals::take().unwrap();
-    let port1 = hal::gpio::p1::Parts::new(p.P1);
-    let mut led = port1.p1_10.into_push_pull_output(Level::Low);
+#[main]
+async fn main(_spawner: Spawner) -> ! {
+    info!("Starting...");
+    let p = embassy_nrf::init(Default::default());
+    let mut button = Input::new(p.P1_02, Pull::Up);
     loop {
-        let new_state = led.is_set_low().unwrap();
-        info!("Turning {}...", new_state.then_some("on").unwrap_or("off"));
-        led.set_state(new_state.into()).unwrap();
-        for _ in 0..(5e6 as i32) {
-            nop();
-        }
+        button.wait_for_low().await;
+        info!("Button pressed!");
+        button.wait_for_high().await;
+        info!("Button released.");
     }
 }
