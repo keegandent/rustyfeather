@@ -1,6 +1,12 @@
 [build]
 target = "thumbv7em-none-eabihf"
 
+[env]
+DEFMT_LOG = "trace"
+
 [target.thumbv7em-none-eabihf]
-rustflags = ["-C", "link-arg=-Tlink.x"]
+rustflags = [
+    "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=-Tdefmt.x",
+]
 runner = "probe-rs run --protocol swd --chip nRF52840_xxAA"

@@ -22,12 +22,14 @@
                     "rttChannelFormats": [
                         {
                             "channelNumber": 0,
-                            "dataFormat": "String",
+                            "dataFormat": "Defmt",
                             "showTimestamps": true
                         }
                     ]
                 }
-            ]
+            ],
+            // Info, Debug
+            "consoleLogLevel": "Console"
         }
     ]
 }
