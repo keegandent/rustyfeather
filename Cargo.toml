@@ -8,6 +8,20 @@ cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.5"
 defmt = "1.0.1"
 defmt-rtt = "1.0.0"
-embassy-executor = { version = "0.9.0", features = ["arch-cortex-m", "defmt", "executor-thread"] }
-embassy-nrf = { version = "0.7.0", features = ["defmt", "nrf52840", "gpiote"] }
+embassy-executor = { version = "0.9.0", features = [
+    "arch-cortex-m",
+    "defmt",
+    "executor-thread",
+] }
+embassy-nrf = { version = "0.7.0", features = [
+    "defmt",
+    "nrf52840",
+    "gpiote",
+    "time-driver-rtc1",
+    "time",
+] }
+embassy-time = { version = "0.5.0", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+] }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
