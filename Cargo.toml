@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
+cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 defmt = "1.0.1"
 defmt-rtt = "1.0.0"
@@ -23,5 +23,12 @@ embassy-nrf = { version = "0.7.0", features = [
 embassy-time = { version = "0.5.0", features = [
     "defmt",
     "defmt-timestamp-uptime",
+] }
+nrf-softdevice = { version = "0.1.0", path = "../nrf-softdevice/nrf-softdevice", features = [
+    "defmt",
+    "ble-peripheral",
+    "s140",
+    "nrf52840",
+    "critical-section-impl",
 ] }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
