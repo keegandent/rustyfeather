@@ -28,7 +28,7 @@ async fn main(spawner: Spawner) -> ! {
         ..Default::default()
     };
     let sd = Softdevice::enable(&config);
-    spawner.spawn(softdevice_task(sd)).unwrap();
+    spawner.spawn(softdevice_task(sd).unwrap());
 
     info!("Starting...");
     let mut button = Input::new(p.P1_02, Pull::Up);
