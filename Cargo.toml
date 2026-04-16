@@ -12,23 +12,31 @@ embassy-executor = { version = "0.10.0", features = [
     "platform-cortex-m",
     "defmt",
     "executor-thread",
+    "executor-interrupt",
 ] }
 embassy-nrf = { version = "0.10.0", features = [
     "defmt",
     "nrf52840",
     "gpiote",
     "time-driver-rtc1",
-    "time",
+    "unstable-pac",
 ] }
 embassy-time = { version = "0.5.1", features = [
     "defmt",
     "defmt-timestamp-uptime",
 ] }
-nrf-softdevice = { version = "0.1.0", path = "../nrf-softdevice/nrf-softdevice", features = [
-    "defmt",
-    "ble-peripheral",
-    "s140",
-    "nrf52840",
-    "critical-section-impl",
-] }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
+embassy-futures = "0.1.1"
+embassy-sync = { version = "0.6", features = ["defmt"] }
+nrf-sdc = { version = "0.4", default-features = false, features = ["defmt", "peripheral", "nrf52840"] }
+nrf-mpsl = { version = "0.3", default-features = false, features = ["defmt", "critical-section-impl"] }
+bt-hci = { version = "0.8", default-features = false, features = ["defmt"] }
+trouble-host = { git = "https://github.com/embassy-rs/trouble.git", features = ["derive", "scan", "gatt"] }
+static_cell = "2"
+rand_core = "0.6"
+rand_chacha = { version = "0.3", default-features = false }
+
+[patch.crates-io]
+nrf-sdc = { git = "https://github.com/alexmoon/nrf-sdc.git", rev = "812a56e3411bc3ff850d354401d95221e1f4fb84" }
+nrf-mpsl = { git = "https://github.com/alexmoon/nrf-sdc.git", rev = "812a56e3411bc3ff850d354401d95221e1f4fb84" }
+bt-hci = { git = "https://github.com/embassy-rs/bt-hci.git", rev = "f6f359650e671d71c96b4354a6b5e26ea3918031" }
