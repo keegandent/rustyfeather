@@ -27,11 +27,11 @@ embassy-time = { version = "0.5.1", features = [
 ] }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 embassy-futures = "0.1.1"
-embassy-sync = { version = "0.6", features = ["defmt"] }
+embassy-sync = { version = "0.8", features = ["defmt"] }
 nrf-sdc = { version = "0.4", default-features = false, features = ["defmt", "peripheral", "nrf52840"] }
 nrf-mpsl = { version = "0.3", default-features = false, features = ["defmt", "critical-section-impl"] }
 bt-hci = { version = "0.8", default-features = false, features = ["defmt"] }
-trouble-host = { git = "https://github.com/embassy-rs/trouble.git", features = ["derive", "scan", "gatt"] }
+trouble-host = { git = "https://github.com/embassy-rs/trouble.git", features = ["derive", "scan", "gatt", "defmt"] }
 static_cell = "2"
 rand_core = "0.6"
 rand_chacha = { version = "0.3", default-features = false }
