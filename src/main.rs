@@ -7,8 +7,9 @@ use embassy_executor::Spawner;
 use embassy_futures::join::join;
 use embassy_nrf::mode::Async;
 use embassy_nrf::peripherals::RNG;
-use embassy_nrf::{Peri, bind_interrupts, rng};
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_nrf::{Peri, bind_interrupts, i2s, rng};
+use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex};
+use embassy_sync::signal::Signal;
 use embassy_time::Duration;
 use nrf_sdc::mpsl::MultiprotocolServiceLayer;
 use nrf_sdc::{self as sdc, mpsl};
@@ -23,7 +24,10 @@ bind_interrupts!(struct Irqs {
     RADIO => nrf_sdc::mpsl::HighPrioInterruptHandler;
     TIMER0 => nrf_sdc::mpsl::HighPrioInterruptHandler;
     RTC0 => nrf_sdc::mpsl::HighPrioInterruptHandler;
+    I2S => i2s::InterruptHandler<embassy_nrf::peripherals::I2S>;
 });
+
+static PLAY_SIGNAL: Signal<CriticalSectionRawMutex, bool> = Signal::new();
 
 #[embassy_executor::task]
 async fn mpsl_task(mpsl: &'static MultiprotocolServiceLayer<'static>) -> ! {
@@ -61,11 +65,64 @@ struct NusServer {
 fn handle_controller_packet(data: &[u8]) {
     if data.len() >= 4 && data[0] == b'!' && data[1] == b'B' && data[3] == b'1' {
         match data[2] {
-            b'1' => info!("BLE Play button pressed."),
-            b'2' => info!("BLE Pause button pressed."),
+            b'1' => { info!("BLE Play button pressed."); PLAY_SIGNAL.signal(true); }
+            b'2' => { info!("BLE Pause button pressed."); PLAY_SIGNAL.signal(false); }
             b'3' => info!("BLE Next button pressed."),
             b'4' => info!("BLE Previous button pressed."),
             _ => {}
+        }
+    }
+}
+
+// One full 100 Hz period per buffer: first 238 words = HIGH, last 238 words = LOW.
+// Both buffers hold identical waveforms so TXPTRUPD timing doesn't matter — the DMA
+// always plays a correct period regardless of how quickly the software swaps buffers.
+// Stereo i32: L in bits[31:16], R in bits[15:0]; both halves carry the same sample.
+#[embassy_executor::task]
+async fn i2s_task(
+    i2s_periph: Peri<'static, embassy_nrf::peripherals::I2S>,
+    mck: Peri<'static, embassy_nrf::peripherals::P0_12>,   // MCK output (free GPIO; change if occupied)
+    sck: Peri<'static, embassy_nrf::peripherals::P0_14>,   // SCK / bit clock
+    lrck: Peri<'static, embassy_nrf::peripherals::P0_13>,  // LRCK / WS
+    sdout: Peri<'static, embassy_nrf::peripherals::P0_15>, // SD / serial data
+) {
+    // Only Ratio::_32x (index 0) reliably maps to 32x on this hardware.
+    // Dial the sample rate via MckFreq: 32MHz/21 = 1,523,809 Hz / 32 = ~47,619 Hz (~48 kHz).
+    let master_clock = i2s::MasterClock::new(i2s::MckFreq::_32MDiv21, i2s::Ratio::_32x);
+    let config = i2s::Config::default(); // Stereo, Align::Left, Format::I2S (Philips)
+
+    let driver = i2s::I2S::new_master(i2s_periph, Irqs, mck, sck, lrck, master_clock, config);
+
+    let mut stream = driver.output(sdout, i2s::DoubleBuffering::<i32, 476>::new());
+
+    let fill_period = |buf: &mut [i32]| {
+        buf[..238].fill(0x7FFF_7FFF_u32 as i32);
+        buf[238..].fill(0x8000_8000_u32 as i32);
+    };
+
+    loop {
+        // Wait for play command
+        loop {
+            if PLAY_SIGNAL.wait().await { break; }
+        }
+        info!("I2S: starting ~100 Hz square wave");
+
+        fill_period(stream.buffer());
+        unwrap!(stream.start().await);
+        fill_period(stream.buffer()); // both buffers identical; swap timing doesn't matter
+
+        loop {
+            // Let the DMA transfer complete before checking for stop.
+            // Dropping send() mid-flight disables the TXPTRUPD interrupt, which
+            // prevents start() from working again on the next play press.
+            unwrap!(stream.send().await);
+            if PLAY_SIGNAL.signaled() {
+                if !PLAY_SIGNAL.wait().await {
+                    info!("I2S: stopping");
+                    stream.stop().await;
+                    break;
+                }
+            }
         }
     }
 }
@@ -186,6 +243,14 @@ async fn main(spawner: Spawner) {
         p.PPI_CH26, p.PPI_CH27, p.PPI_CH28, p.PPI_CH29,
     );
     let (mut ble_runner, mut ble_peripheral) = init_ble_stack(&spawner, mpsl_p, sdc_p, p.RNG);
+
+    spawner.spawn(unwrap!(i2s_task(
+        p.I2S,
+        p.P0_12, // MCK — free GPIO output; change if pin is occupied
+        p.P0_14, // SCK
+        p.P0_13, // LRCK / WS
+        p.P0_15, // SDOUT / SD
+    )));
 
     info!("Starting...");
 
