@@ -35,6 +35,7 @@ trouble-host = { git = "https://github.com/embassy-rs/trouble.git", features = [
 static_cell = "2"
 rand_core = "0.6"
 rand_chacha = { version = "0.3", default-features = false }
+libm = { version = "0.2", default-features = false }
 
 [patch.crates-io]
 nrf-sdc = { git = "https://github.com/alexmoon/nrf-sdc.git", rev = "812a56e3411bc3ff850d354401d95221e1f4fb84" }

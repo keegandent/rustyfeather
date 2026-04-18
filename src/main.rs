@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
 
-use defmt::{info, unwrap};
+use core::sync::atomic::{AtomicBool, Ordering};
+use defmt::{debug, info, unwrap};
+extern crate libm;
 use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_futures::join::join;
@@ -27,7 +29,12 @@ bind_interrupts!(struct Irqs {
     I2S => i2s::InterruptHandler<embassy_nrf::peripherals::I2S>;
 });
 
-static PLAY_SIGNAL: Signal<CriticalSectionRawMutex, bool> = Signal::new();
+static IS_PLAYING: AtomicBool = AtomicBool::new(false);
+// Kicked when IS_PLAYING transitions false→true so the i2s_task can wake from
+// deep sleep. The i2s_task is genuinely suspended here (no DMA running), so the
+// waker registration is always valid. The false→true transition uses AtomicBool
+// directly in the DMA hot loop to avoid any waker dependency there.
+static PLAY_NOTIFY: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 #[embassy_executor::task]
 async fn mpsl_task(mpsl: &'static MultiprotocolServiceLayer<'static>) -> ! {
@@ -63,20 +70,27 @@ struct NusServer {
 // Bluefruit Controller packet: !B<button><state><CRC>
 // button: ASCII '1'-'8', state: '1' = pressed, '0' = released
 fn handle_controller_packet(data: &[u8]) {
-    if data.len() >= 4 && data[0] == b'!' && data[1] == b'B' && data[3] == b'1' {
+    if data.len() < 4 {
+        debug!("BLE: short packet ({} bytes), ignoring", data.len());
+        return;
+    }
+    if data[0] == b'!' && data[1] == b'B' && data[3] == b'1' {
         match data[2] {
-            b'1' => { info!("BLE Play button pressed."); PLAY_SIGNAL.signal(true); }
-            b'2' => { info!("BLE Pause button pressed."); PLAY_SIGNAL.signal(false); }
-            b'3' => info!("BLE Next button pressed."),
-            b'4' => info!("BLE Previous button pressed."),
-            _ => {}
+            b'1' => { info!("BLE: play"); IS_PLAYING.store(true, Ordering::Relaxed); PLAY_NOTIFY.signal(()); }
+            b'2' => { info!("BLE: pause"); IS_PLAYING.store(false, Ordering::Relaxed); }
+            b'3' => info!("BLE: next"),
+            b'4' => info!("BLE: previous"),
+            _ => debug!("BLE: unknown button {:#x}", data[2]),
         }
     }
 }
 
-// One full 100 Hz period per buffer: first 238 words = HIGH, last 238 words = LOW.
-// Both buffers hold identical waveforms so TXPTRUPD timing doesn't matter — the DMA
-// always plays a correct period regardless of how quickly the software swaps buffers.
+const TONE_HZ: f32 = 8000.0;
+const TONE_DBFS: f32 = -3.0;
+// 32 MHz / 21 / 32 = 47,619 Hz; round to nearest whole period.
+const SAMPLE_RATE: f32 = 32_000_000.0 / 21.0 / 32.0;
+const TONE_SAMPLES: usize = (SAMPLE_RATE / TONE_HZ + 0.5) as usize;
+
 // Stereo i32: L in bits[31:16], R in bits[15:0]; both halves carry the same sample.
 #[embassy_executor::task]
 async fn i2s_task(
@@ -86,42 +100,45 @@ async fn i2s_task(
     lrck: Peri<'static, embassy_nrf::peripherals::P0_13>,  // LRCK / WS
     sdout: Peri<'static, embassy_nrf::peripherals::P0_15>, // SD / serial data
 ) {
-    // Only Ratio::_32x (index 0) reliably maps to 32x on this hardware.
-    // Dial the sample rate via MckFreq: 32MHz/21 = 1,523,809 Hz / 32 = ~47,619 Hz (~48 kHz).
     let master_clock = i2s::MasterClock::new(i2s::MckFreq::_32MDiv21, i2s::Ratio::_32x);
     let config = i2s::Config::default(); // Stereo, Align::Left, Format::I2S (Philips)
 
     let driver = i2s::I2S::new_master(i2s_periph, Irqs, mck, sck, lrck, master_clock, config);
+    let mut stream = driver.output(sdout, i2s::DoubleBuffering::<i32, TONE_SAMPLES>::new());
 
-    let mut stream = driver.output(sdout, i2s::DoubleBuffering::<i32, 476>::new());
-
-    let fill_period = |buf: &mut [i32]| {
-        buf[..238].fill(0x7FFF_7FFF_u32 as i32);
-        buf[238..].fill(0x8000_8000_u32 as i32);
+    let amplitude = libm::powf(10.0_f32, TONE_DBFS / 20.0) * i16::MAX as f32;
+    let fill_sine = |buf: &mut [i32]| {
+        for (i, v) in buf.iter_mut().enumerate() {
+            let s = libm::sinf(2.0 * core::f32::consts::PI * i as f32 / TONE_SAMPLES as f32);
+            let w = (s * amplitude) as i16 as u16 as u32;
+            *v = (w << 16 | w) as i32;
+        }
     };
 
     loop {
-        // Wait for play command
+        // DMA is stopped here — MCU can sleep between BLE events.
+        // PLAY_NOTIFY is only signaled on false→true, and the task is genuinely
+        // suspended (Poll::Pending), so the waker is always registered correctly.
+        info!("I2S: waiting (DMA stopped)");
         loop {
-            if PLAY_SIGNAL.wait().await { break; }
+            PLAY_NOTIFY.wait().await;
+            if IS_PLAYING.load(Ordering::Relaxed) { break; }
         }
-        info!("I2S: starting ~100 Hz square wave");
 
-        fill_period(stream.buffer());
+        info!("I2S: starting");
+        fill_sine(stream.buffer());
         unwrap!(stream.start().await);
-        fill_period(stream.buffer()); // both buffers identical; swap timing doesn't matter
+        fill_sine(stream.buffer()); // both buffers identical; TXPTRUPD timing irrelevant
 
+        // Playing loop. IS_PLAYING is an AtomicBool read — no waker registration,
+        // no risk of the signal being lost if send() returns Poll::Ready immediately.
         loop {
-            // Let the DMA transfer complete before checking for stop.
-            // Dropping send() mid-flight disables the TXPTRUPD interrupt, which
-            // prevents start() from working again on the next play press.
             unwrap!(stream.send().await);
-            if PLAY_SIGNAL.signaled() {
-                if !PLAY_SIGNAL.wait().await {
-                    info!("I2S: stopping");
-                    stream.stop().await;
-                    break;
-                }
+            if !IS_PLAYING.load(Ordering::Relaxed) {
+                info!("I2S: stopping");
+                stream.stop().await;
+                info!("I2S: stopped");
+                break;
             }
         }
     }
@@ -266,8 +283,8 @@ async fn main(spawner: Spawner) {
             info!("Connected");
             loop {
                 match conn.next().await {
-                    GattConnectionEvent::Disconnected { .. } => {
-                        info!("Disconnected");
+                    GattConnectionEvent::Disconnected { reason } => {
+                        info!("BLE: disconnected, reason={:?}", reason);
                         break;
                     }
                     GattConnectionEvent::Gatt { event } => {
